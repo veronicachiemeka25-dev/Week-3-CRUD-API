@@ -1,16 +1,16 @@
 require("dotenv").config();
-
 const express = require('express');
-
+const cors = require('cors'); //cors
 const app = express();
 
 //body parsing middleware
 app.use(express.json());
+app.use(cors('*'));
 
 // In-memory data store for todos
 let todos = [
-    { id: 1, task: 'Learn Express routing', completed: true },
-    { id : 2, task: 'Build CRUD API', completed: false },
+    { id: 1, task: 'Finish Week 4 slides', completed: true },
+    { id : 2, task: 'Deploy API (today!)', completed: false },
     { id : 3, task: 'Push repository to GitHub', completed: false }
 ];
 
