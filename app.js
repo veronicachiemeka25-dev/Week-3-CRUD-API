@@ -1,11 +1,21 @@
 require("dotenv").config();
 const express = require('express');
 const cors = require('cors'); //cors
+const logRequest = require('./middlewares/logger');
+const validateTodo = require('./middlewares/validator');
+const errorhandler = require('./middlewares/errorHandler');
+const validateTodoPatch = require('./middlewares/validatorpatch');
 const app = express();
+app.use(express.json()); // Parse JSON bodies
 
-//body parsing middleware
-app.use(express.json());
-app.use(cors('*'));
+const corsOptions = {
+    Origin: 'http://localhost:5173',
+    // some legacy browsers (IEII, various SmartTVs) choke on 204
+};
+
+app.use(cors(corsOptions));
+
+app.use(logRequest);
 
 // In-memory data store for todos
 let todos = [
@@ -20,61 +30,79 @@ app.get('/todos', (req, res) => {
 });
 
 // 2. BONUS: GET /todos/active - Filter incomplete/active todos (!completed)
-app.get('/todos/active', (req, res) => {
-    const activeTodos = todos.filter(t => !t.completed);
+app.get('/todos/active', (req, res, next) => {
+    try {
+        const activeTodos = todos.filter(t => !t.completed);
     res.json(activeTodos);
+    } catch (error){
+        next (error);
+    }
 });
 
 // 3. GET /todos/:id - Single read for a specific todo by ID
-app.get('/todos/:id', (req, res) => {
-    const todoId = parseInt(req.params.id); 
-    const todo = todos.find(t => t.id === todoId);
+app.get('/todos/:id', (req, res, next) => {
+    try {
+        const id = parseInt(req.params.id); 
+        if(isNaN(id)){
+            throw new Error("invalid ID");
+        }
+    const todo = todos.find(t => t.id === id);
     if (!todo){
-        return res.status(404).json({ error: 'Todo not found'});
+        return res.status(404).json({ message: 'Todo not found'});
     }
-    res.json(todo);
+    res.status(200).json(todo);
+    } catch (error) {
+        next (error);
+    }
 });
 
-app.post('/todos', (req, res) => {
-    const { task, completed } = req.body;
+app.post('/todos', validateTodo, (req, res, next) => {
+    try{
+        const { task } = req.body;
 
-    // Validation: Require 'task' field (returns 400 if missing)
-    if (!task) {
-        return res.status(400).json({ error: "Validation failed: 'task' field is required."});
+    
+    if (!task || task.length <= 2 ) {
+        return res.status(400).json({ message: 'Please provide the task' });
     }
     const newTodo = { 
-        id: todos.length > 0 ? todos[todos.length - 1].id + 1 : 1,
-        task: task,
-        completed: completed !== undefined ? completed : false
-    };
-
+        id: todos.length + 1, ...req.body }; // Auto-ID
+        
     todos.push(newTodo);
-    res.status(201).json(newTodo); 
+    res.status(201).json(newTodo); // Echo back
+    } catch (error){
+        next (error);
+    }
 });
 
 // PATCH Update - Partial
-    app.patch('/todos/:id', (req, res) => {
-    const todo = todos.find((t) => t.id === parseInt(req.params.id)); // Array.find()
+    app.patch('/todos/:id', validateTodoPatch, (req, res, next) => {
+    try {
+        const todo = todos.find((t) => t.id === parseInt(req.params.id)); // Array.find()
     if (!todo) return res.status(404).json({ message: 'Todo not found' });
     Object.assign(todo, req.body); // Merge: e.g., {completed: true}
     res.status(200).json(todo); 
+    } catch (error){
+        next (error);
+    }
 });
 
  
 // DELETE Remove
-app.delete('/todos/:id', (req, res) => {
-    const id = parseInt(req.params.id); 
+app.delete('/todos/:id', (req, res, next) => {
+    try {
+        const id = parseInt(req.params.id); 
     const initialLength = todos.length;
     todos = todos.filter((t) => t.id !== id) ; // Array.filter() non.destructive
     if (todos.length === initialLength) 
     return res.status (404).json({ error: 'Not found' });
     res.status(204).send(); // Silent success
+    } catch (error){
+        next (error);
+    }
 });
 
-    app.use((err, req, res, next) => {
-        res.status(500).json ({ error: 'Server error!' });   
-});
-
+    app.use(errorhandler);
+        
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
